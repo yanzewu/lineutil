@@ -3,6 +3,7 @@ from . import style
 
 def preset_prl():
     style.setd_serif(fontsize=16)
+    style.setd_math_font()
     style.setd_subplot()
     style.setd_legend()
     style.setd_grid(color='#bbb')
@@ -13,6 +14,7 @@ def preset_prl():
 
 def preset_nature():
     style.setd_sans_serif(fontsize=14)
+    style.setd_regular_math_font()
     style.setd_subplot()
     style.setd_legend()
     style.setd_grid(color='#bbb')

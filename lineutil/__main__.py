@@ -91,8 +91,8 @@ def parse_range(s):
 def main():
 
     parser = argparse.ArgumentParser('plot one or multiple files')
-    parser.add_argument('-x', action='append', default='1', help='The identifier of x column. Either a number (starting from 1) or a column title')
-    parser.add_argument('-y', action='append', default='2:', help='The identifier of y columns. One of a number, a column title or a range (like "1:5")')
+    parser.add_argument('-x', default='1', help='The identifier of x column. Either a number (starting from 1) or a column title')
+    parser.add_argument('-y', default='2:', help='The identifier of y columns. One of a number, a column title or a range (like "1:5")')
     parser.add_argument('-s', '--style', action='append', nargs='?', help='Style of lines that will be passed to plt.plot(). In the format "key=args,key2=arg2,..."')
     parser.add_argument('-cm', '--colormap', action='append', nargs='?', help='Name of the colormap')
     parser.add_argument('-mcm', '--markercolormap', default='line.lighter', help='Name of the colormap for the marker facecolor')
@@ -131,6 +131,7 @@ def main():
     style.setd_legend()
     style.setd_line()
     style.setd_ticks()
+    style.setd_subplot(linewidth=0.8)
     style.setd_minor_ticks()
 
     plt.figure('line')

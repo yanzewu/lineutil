@@ -29,15 +29,18 @@ def setd_serif(fontsize:int=14):
     plt.rcParams['font.serif'] = ['Times New Roman', 'Times'] + plt.rcParams['font.serif']
 
 
-def setd_math_font(fontfamily:str='cm'):
+def setd_math_font(fontfamily:str='cm', fontstyle:str='it'):
     """ Set the mathematical font family.
     """
-    plt.rcParams['mathtext.fontset'] = fontfamily
+    plt.rc('mathtext', fontset=fontfamily, default=fontstyle)
 
-def setd_subplot(linewidth:float=1):
+def setd_regular_math_font():
+    plt.rc('mathtext', default='regular')
+
+def setd_subplot(linewidth:float=1, margin=0, autolimit_mode='round_numbers'):
     """ Set the default parameters for subplots.
     """
-    plt.rc('axes', linewidth=linewidth)
+    plt.rc('axes', linewidth=linewidth, xmargin=margin, ymargin=margin, autolimit_mode=autolimit_mode)
 
 def setd_legend(frameon:bool=False, fancybox:bool=False, framealpha:float=0):
     """ Set the default parameters for legend.
@@ -98,7 +101,7 @@ def setd_minor_ticks(axis='both', direction='in', width=0.5, length=2, nticks=1)
     """ Set the default parameters for ticks.
     
     axis: 'x'/'y'/'both'. The axis applied to.
-    nticks: How many ticks shown between the two major ticks.
+    nticks: How many ticks shown between the two major ticks. (only works for matplotlib version >= 3.8)
     """
     if axis == 'both':
         groups = ('xtick', 'ytick')
@@ -112,7 +115,10 @@ def setd_minor_ticks(axis='both', direction='in', width=0.5, length=2, nticks=1)
 
     for g in groups:
         plt.rc(g, direction=direction)
-        plt.rc(g + '.minor', width=width, size=length, visible=True, ndivs=nticks+1)
+        try:
+            plt.rc(g + '.minor', width=width, size=length, visible=True, ndivs=nticks+1)
+        except KeyError:
+            plt.rc(g + '.minor', width=width, size=length, visible=True)
 
 # size-related
 
@@ -180,14 +186,6 @@ def set_figuresize_by_subplots(alignment=None, subplot_width=5, subplot_height=4
 
 # axis formatting
 
-# def xlim(*args):
-#     # auto => auto determine 
-#     pass
-
-# def ylim(*args):
-#     pass
-
-
 def set_tick_params(axes:Optional[Axes]=None, axis:str='both', direction:str='in', width:float=0.5, length:float=3, 
                     double_ticks:str='both', **kwargs):
     """ Set the major tick formats. By default, the ticks will be inside the plot, and tick will be showing on 
@@ -222,7 +220,7 @@ def set_tick_params(axes:Optional[Axes]=None, axis:str='both', direction:str='in
         t.set_ticks_position('both')
 
 
-def set_minor_tick_params(axes=None, axis='both', nticks=1, direction='in', width=0.5, length=2, **kwargs):
+def set_minor_tick_params(axes=None, axis:str='both', nticks:int=1, direction:str='in', width:float=0.5, length:float=2, show_ticklabel:bool=False, **kwargs):
     """ Set the minor tick formats. By default, the ticks will be inside the plot, and one minor tick will be 
         generated between two major ticks.
     """
@@ -242,10 +240,38 @@ def set_minor_tick_params(axes=None, axis='both', nticks=1, direction='in', widt
     assert nticks >= 0
     
     for t in a:
-        t.set_minor_locator(ticker.AutoMinorLocator(nticks+1))
+        if t.get_scale() == 'log':
+            t.set_minor_locator(ticker.LogLocator(subs=[10/(nticks+1)*j for j in range(1,nticks+1)]))
+        else:
+            t.set_minor_locator(ticker.AutoMinorLocator(nticks+1))
+        if not show_ticklabel:
+            t.set_minor_formatter(ticker.NullFormatter())
 
     axes.tick_params(axis, which='minor', direction=direction, width=width, length=length, **kwargs)
     
+
+def set_tick_power_format(axes=None, axis:str='both', power_limit:int=5):
+    """ For linear scale tick labels, mpl will display a "1e-xx" label when data is too small/big.
+    This function changes the format to latex "10^xx".
+
+    power_limit: The magnitude (greator or equal) when the offset notation is used.
+    """
+    if axes is None:
+        axes = plt.gca()
+
+    if axis == 'both':
+        a = [axes.xaxis, axes.yaxis]
+    elif axis == 'x':
+        a = [axes.xaxis]
+    elif axis == 'y':
+        a = [axes.yaxis]
+    else:
+        raise ValueError(axis)
+    
+    for a_ in a:
+        fmt = ticker.ScalarFormatter(useMathText=True)
+        fmt.set_powerlimits((-power_limit, power_limit))
+        a_.set_major_formatter(fmt)
 
 # def set_tick_power_format(axis='both', fmt='%[.2]m'):
 #     """ Shows mathematical power "10^x" instead of "1e+x". Particularly useful for logarithm plots.
@@ -323,9 +349,15 @@ def set_border(axes:Optional[Axes]=None, visible:Union[bool,str]='full', linewid
         axes.xaxis.set_visible(False)
         axes.yaxis.set_visible(False)
 
+def set_xylabel(xlabel, ylabel, **kwargs):
+    """ Set x and y labels simutaneously.
+    """
+    plt.xlabel(xlabel, **kwargs)
+    plt.ylabel(ylabel, **kwargs)
+
 # widgets
 
-def legend(*args, box:bool=False, column:int=1, linewidth:float=0.5, loc:str='best', axis_padding:float=0, **kwargs):
+def legend(*args, box:bool=False, column=None, row=None, linewidth:float=0.5, loc:str='best', axis_padding:float=0, **kwargs):
     """ A drop-in replacement for `plt.legend()`.
     
     By default, the box is not shown. If `box=True`, then (by default) will show a thin square box instead
@@ -342,7 +374,10 @@ def legend(*args, box:bool=False, column:int=1, linewidth:float=0.5, loc:str='be
     
     kwargs1.setdefault('frameon', box)
     kwargs1.setdefault('framealpha', 0 if not box else 1)
-    kwargs1.setdefault('ncol', column)
+    if column:
+        kwargs1.setdefault('ncol', column)
+    elif row:
+        kwargs1.setdefault('ncol', round(len(plt.gca().lines)/row + 0.5))
     kwargs1.setdefault('fancybox', False)
 
         # handles outside
