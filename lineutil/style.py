@@ -122,7 +122,7 @@ def setd_minor_ticks(axis='both', direction='in', width=0.5, length=2, nticks=1)
 
 # size-related
 
-def set_subplot_aspect(figure:Optional[Figure]=None, aspect:float=0.8):
+def set_subplot_aspect(aspect:float=0.8, figure:Optional[Figure]=None):
     """ Set the aspect of all subplots.
     """
     if figure is None:
@@ -182,6 +182,45 @@ def set_figuresize_by_subplots(alignment=None, subplot_width=5, subplot_height=4
         raise ValueError(scaling)
 
     figure.set_size_inches(x*s * subplot_width + padding_width, y*s * subplot_height + padding_height)
+
+
+def render_resized(filename:Optional[str]=None, show:Optional[bool]=None, dpi:Optional[int]=None, aspect:Optional[float]=None, transparent:bool=False,
+                   figure:Optional[Figure]=None, **kwargs):
+    """ Shorthand for `set_subplot_aspect()`, `set_figuresize_by_subplots()`, `plt.tight_figure()` and rendering.
+
+    filename: str,None. The file to save. If `None` and show==`None`, will call `plt.show()`.
+    show: Controls whether to show the figure. Only applies when `filename != None`.
+    dpi: The figure dpi.
+    aspect: The subplot aspect. Defaults to 0.6 for a single subplot, and 0.8 for other cases.
+
+    Also when there is only a single subplot, the subfig_width defaults to 6 instead of 5.
+    
+    Additional arguments will be passed to `set_figuresize_by_subplots()`.
+    """
+    # rendering
+
+    if figure is None:
+        figure = plt.gcf()
+
+    single_subplot = len(figure.get_axes()) == 1
+    if aspect is None:
+        aspect = 0.6 if single_subplot else 0.8
+    
+    kwargs1 = kwargs.copy()
+    kwargs1.setdefault('subplot_width', 6 if single_subplot else 5)
+    kwargs1.setdefault('subplot_height', kwargs1['subplot_width'] * aspect)
+
+    set_subplot_aspect(aspect, figure)
+    set_figuresize_by_subplots(**kwargs1, figure=figure)
+    plt.tight_layout()
+
+    if filename is not None:
+        plt.savefig(filename, dpi=dpi, transparent=transparent)
+
+    if filename is None or show:
+        if dpi:
+            figure.set_dpi(dpi)
+        plt.show()
 
 
 # axis formatting
@@ -272,43 +311,6 @@ def set_tick_power_format(axes=None, axis:str='both', power_limit:int=5):
         fmt = ticker.ScalarFormatter(useMathText=True)
         fmt.set_powerlimits((-power_limit, power_limit))
         a_.set_major_formatter(fmt)
-
-# def set_tick_power_format(axis='both', fmt='%[.2]m'):
-#     """ Shows mathematical power "10^x" instead of "1e+x". Particularly useful for logarithm plots.
-
-#     preserve: If value <= preserver, 
-#     """
-#     # TODO XXX not sure if needed
-
-#     import re
-#     LATEX_G_FORMAT = re.compile(r'\%\.?\d*m')
-
-#     if axes is None:
-#         axes = plt.gca()
-
-#     if axis == 'both':
-#         a = [axes.xaxis, axes.yaxis]
-#     elif axis == 'x':
-#         a = [axes.xaxis]
-#     elif axis == 'y':
-#         a = [axes.yaxis]
-#     else:
-#         raise ValueError(axis)
-    
-#     rem_string = []
-#     replacer = []
-#     old_start = 0
-#     for repl in LATEX_G_FORMAT.finditer(fmt):
-#         rem_string.append(fmt[old_start:repl.start()])
-#         old_start = repl.end()
-#         value1 = repl.group()[:-1] + 'g'
-#         replacer.append(lambda x: '$\mathregular{%s}$' % re.sub(r'e\+?(|\-)0*(\d+)', '\\\\times10^{\\1\\2}', (value1 % x)))
-#     rem_string.append(fmt[repl.end():])
-
-#     _rem_string = tuple(rem_string) # to avoid modification
-#     _replacer = tuple(replacer)
-#     for a_ in a:
-#         a_.set_major_formatter(ticker.FuncFormatter(lambda x, _: ''.join((_rem_string[j] + _replacer[j](x) for j in range(len(_replacer)))) + _rem_string[-1]))
 
 
 def set_border(axes:Optional[Axes]=None, visible:Union[bool,str]='full', linewidth:float=1, linestyle='-', color='black'):
