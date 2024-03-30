@@ -1,5 +1,6 @@
 
 from typing import Optional, Union
+import colorsys
 
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
@@ -42,10 +43,10 @@ def setd_subplot(linewidth:float=1, margin=0, autolimit_mode='round_numbers'):
     """
     plt.rc('axes', linewidth=linewidth, xmargin=margin, ymargin=margin, autolimit_mode=autolimit_mode)
 
-def setd_legend(frameon:bool=False, fancybox:bool=False, framealpha:float=0):
+def setd_legend(frameon:bool=False, fancybox:bool=False, framealpha:float=0, edgecolor='black'):
     """ Set the default parameters for legend.
     """
-    plt.rc('legend', frameon=frameon, framealpha=framealpha, fancybox=fancybox)
+    plt.rc('legend', frameon=frameon, framealpha=framealpha, fancybox=fancybox, edgecolor=edgecolor)
 
 
 def setd_line(linewidth:float=1.5, markersize:float=6, edgewidth:float=0.8):
@@ -185,7 +186,7 @@ def set_figuresize_by_subplots(alignment=None, subplot_width=5, subplot_height=4
 
 
 def render_resized(filename:Optional[str]=None, show:Optional[bool]=None, dpi:Optional[int]=None, aspect:Optional[float]=None, transparent:bool=False,
-                   figure:Optional[Figure]=None, **kwargs):
+                   figure:Optional[Figure]=None, tight_layout=True, **kwargs):
     """ Shorthand for `set_subplot_aspect()`, `set_figuresize_by_subplots()`, `plt.tight_figure()` and rendering.
 
     filename: str,None. The file to save. If `None` and show==`None`, will call `plt.show()`.
@@ -202,9 +203,9 @@ def render_resized(filename:Optional[str]=None, show:Optional[bool]=None, dpi:Op
     if figure is None:
         figure = plt.gcf()
 
-    single_subplot = len(figure.get_axes()) == 1
+    single_subplot = len(figure.get_axes()) == 1    # TODO identify twined axes
     if aspect is None:
-        aspect = 0.6 if single_subplot else 0.8
+        aspect = 2/3 if single_subplot else 0.8
     
     kwargs1 = kwargs.copy()
     kwargs1.setdefault('subplot_width', 6 if single_subplot else 5)
@@ -212,7 +213,8 @@ def render_resized(filename:Optional[str]=None, show:Optional[bool]=None, dpi:Op
 
     set_subplot_aspect(aspect, figure)
     set_figuresize_by_subplots(**kwargs1, figure=figure)
-    plt.tight_layout()
+    if tight_layout:
+        plt.tight_layout()
 
     if filename is not None:
         plt.savefig(filename, dpi=dpi, transparent=transparent)
@@ -359,7 +361,7 @@ def set_xylabel(xlabel, ylabel, **kwargs):
 
 # widgets
 
-def legend(*args, box:bool=False, column=None, row=None, linewidth:float=0.5, loc:str='best', axis_padding:float=0, **kwargs):
+def legend(*args, axes=None, box:bool=False, column=None, row=None, linewidth:float=0.5, loc:str='best', axis_padding:float=0, **kwargs):
     """ A drop-in replacement for `plt.legend()`.
     
     By default, the box is not shown. If `box=True`, then (by default) will show a thin square box instead
@@ -372,6 +374,9 @@ def legend(*args, box:bool=False, column=None, row=None, linewidth:float=0.5, lo
     axis_padding: For legends out of subplot, specify the padding distance to the subplot.
     """
 
+    if axes is None:
+        axes = plt.gca()
+
     kwargs1 = kwargs.copy()
     
     kwargs1.setdefault('frameon', box)
@@ -379,7 +384,7 @@ def legend(*args, box:bool=False, column=None, row=None, linewidth:float=0.5, lo
     if column:
         kwargs1.setdefault('ncol', column)
     elif row:
-        kwargs1.setdefault('ncol', round(len(plt.gca().lines)/row + 0.5))
+        kwargs1.setdefault('ncol', round(len(axis.lines)/row + 0.5))
     kwargs1.setdefault('fancybox', False)
 
         # handles outside
@@ -396,7 +401,7 @@ def legend(*args, box:bool=False, column=None, row=None, linewidth:float=0.5, lo
 
     kwargs1['loc'] = loc
     
-    l = plt.legend(*args, **kwargs1)
+    l = axes.legend(*args, **kwargs1)
     if box:
         frame = l.get_frame()
         frame.set_linewidth(linewidth)
@@ -404,10 +409,15 @@ def legend(*args, box:bool=False, column=None, row=None, linewidth:float=0.5, lo
     return l
 
 
-def plot_subplot_labels(position:Union[str,tuple,list,dict]='upper right', formatter='(%s)', padding=(0.02, 0.02), figure:Optional[Figure]=None, **kwargs):
+def plot_subplot_labels(position:Union[str,tuple,list,dict]='upper right', formatter='(%s)', padding=(0.02, 0.02), figure:Optional[Figure]=None, axes=None, **kwargs):
     """ Adding labels to subplots.
 
-    position: 
+    position: Either a str/tuple, or a list/dict of them. A list will set the positions of each subplot iteratively. A dict will set the positions 
+        by the subplot id (starting from 1). The dict must have a `None` entry to represent the default value.
+    formatter: The formatter of letters (a, b, c,...)
+    padding: Padding to the axis border;
+
+    Additional kwargs will be passed to text().
     """
     if figure is None:
         figure = plt.gcf()
@@ -436,7 +446,12 @@ def plot_subplot_labels(position:Union[str,tuple,list,dict]='upper right', forma
         raise ValueError(position)
 
 
-    for j, a in enumerate(figure.get_axes()):
+    if axes is None:
+        axes = figure.get_axes()
+
+    texts = []
+
+    for j, a in enumerate(axes):
         
         if mode == 0:
             l, b, halign, valign = pos
@@ -444,7 +459,9 @@ def plot_subplot_labels(position:Union[str,tuple,list,dict]='upper right', forma
             l, b, halign, valign = pos[j]
         elif mode == 2:
             l, b, halign, valign = pos.get(j+1, default_pos)
-        a.text(l, b, formatter % (chr(j+97)), horizontalalignment=halign, verticalalignment=valign, transform=a.transAxes, **kwargs)
+        texts.append(a.text(l, b, formatter % (chr(j+97)), horizontalalignment=halign, verticalalignment=valign, transform=a.transAxes, **kwargs))
+
+    return texts
 
 # coloring
 
@@ -463,6 +480,16 @@ def get_colors(name:str='default', step:Union[int, float]=0.4):
             return [cm(x*step) for x in range(ceil(1/step))]
     else:
         return cm.colors
+
+
+name2color = colors.to_rgb
+
+def lighten_color(r, g, b, offset:float=0.25):
+    """ Return a lighter version of the color.
+    offset: the improvement of the lighting scale.
+    """
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    return colorsys.hls_to_rgb(h, min(l+offset, 1.0), s)
 
 
 def set_prop_cycle(axes:Optional[Axes]=None, colormap:Union[list,str]='line.default', marker_colormap:Optional[str]=None, 
@@ -494,9 +521,12 @@ def set_prop_cycle(axes:Optional[Axes]=None, colormap:Union[list,str]='line.defa
         colors = colors[1:]
 
     if marker_colormap:
-        marker_colors = get_colors(marker_colormap)
-        if skip_header and marker_colormap.startswith('line.'):
-            marker_colors = marker_colors[1:]
+        if isinstance(marker_colormap, str):
+            marker_colors = get_colors(marker_colormap)
+            if skip_header and marker_colormap.startswith('line.'):
+                marker_colors = marker_colors[1:]
+        else:
+            marker_colors = marker_colormap
         color_cycler = cycler(color=colors, mfc=_loop_list(marker_colors, len(colors)))
     else:
         color_cycler = cycler(color=colors)

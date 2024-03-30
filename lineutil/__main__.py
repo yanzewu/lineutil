@@ -87,17 +87,20 @@ def parse_range(s):
     p, q = s.split(':', 1)
     return (float(p) if p else None, float(q) if q else None)
 
+def parse_bool(s):
+    return {'true':True, 'false':False}[s.lower()]
+
 
 def main():
 
     parser = argparse.ArgumentParser('plot one or multiple files')
     parser.add_argument('-x', default='1', help='The identifier of x column. Either a number (starting from 1) or a column title')
     parser.add_argument('-y', default='2:', help='The identifier of y columns. One of a number, a column title or a range (like "1:5")')
-    parser.add_argument('-s', '--style', action='append', nargs='?', help='Style of lines that will be passed to plt.plot(). In the format "key=args,key2=arg2,..."')
+    parser.add_argument('-s', '--style', action='append', nargs='?', help='Keyword arguments passed to individual plt.plot() call respectively, with format "key=args,key2=arg2,..."')
     parser.add_argument('-cm', '--colormap', action='append', nargs='?', help='Name of the colormap')
-    parser.add_argument('-mcm', '--markercolormap', default='line.lighter', help='Name of the colormap for the marker facecolor')
-    parser.add_argument('--default', help='The default style of lines that will be passed to plt.plot(). In the format "key=args,key2=arg2,..."')
-    parser.add_argument('--header', choices=['True', 'False'], default=True, help='Whether file has a header of column names')
+    parser.add_argument('-mcm', '--markercolormap', default='lighter', help='Name of the colormap for the marker facecolor; OR one of "same"/"lighter" ')
+    parser.add_argument('--default', help='Keyword arguments passed to all plt.plot() calls. In the format "key=args,key2=arg2,..."')
+    parser.add_argument('--header', type=parse_bool, default=True, help='Whether file has a header of column names')
     parser.add_argument('--sep', default='\s+', help='Separator of the input file')
     # parser.add_argument('--overlay', choices=['direct', 'subplot'], default='direct') # direct/subplot/figure
     parser.add_argument('--save', help='Filename (if save)')
@@ -106,12 +109,16 @@ def main():
     parser.add_argument('--xlim', help='Range of x in the format "start:end"')
     parser.add_argument('--ylim', help='Range of y in the format "start:end"')
     parser.add_argument('--log', choices=['x','y','all'], help='Use log plotting')
-    parser.add_argument('--title', help='Title')
+    parser.add_argument('--dpi', type=int, help='DPI')
+    parser.add_argument('--aspect', type=float, help='Aspect of the subplots')
+    parser.add_argument('--title', help='Title of the figure')
+    parser.add_argument('--legend', help='Legend and legend arguments', type=str, default='True')
     parser.add_argument('files', nargs='+')
 
     args = parser.parse_args()
 
-    translation = {'lt':'linestyle', 'pt':'marker', 'ps':'markersize', 'fill':'fillstyle', 'edgecolor':'markeredgecolor', 'facecolor':'markerfacecolor'}
+    translation = {'c':'color', 'lc':'color', 'lt':'linestyle', 'pt':'marker', 'ps':'markersize', 
+                   'fill':'fillstyle', 'edgecolor':'markeredgecolor', 'facecolor':'markerfacecolor'}
 
     default_style = parse_dict(args.default, translation)
     header = None if not args.header else 0
@@ -126,6 +133,13 @@ def main():
             styles.append(d)
         else:
             styles.append(default_style)
+
+    try:
+        legend = parse_bool(args.legend)
+        legend_style = {}
+    except KeyError:
+        legend = True
+        legend_style = parse_dict(args.legend, translation)
 
     style.setd_sans_serif()
     style.setd_legend()
@@ -156,10 +170,32 @@ def main():
         data = pd.read_csv(file, sep=args.sep, header=header, index_col=False)
         xcol, ycol, xtitle, ytitle = parse_cols(args.x, args.y, data)
 
-        style.set_prop_cycle(colormap=colormaps[n], marker_colormap=args.markercolormap)
+
+        # marker color: If styles is empty, need to inject to colormap
+        # else -- inject to styles
+        if args.markercolormap == 'same':
+            if 'color' in styles[n]:
+                styles[n].setdefault('markerfacecolor', styles[n]['color'])
+                marker_colormap = None
+            else:
+                marker_colormap = colormaps[n]
+        elif args.markercolormap == 'lighter':
+            if 'color' in styles[n]:
+                styles[n].setdefault('markerfacecolor', style.lighten_color(*style.name2color(styles[n]['color'])))
+                marker_colormap = None
+            else:
+                if colormaps[n] == 'line.default':
+                    marker_colormap = 'line.lighter'
+                else:
+                    marker_colormap = [style.lighten_color(*c[:3]) for c in style.get_colors(colormaps[n])]
+        else:
+            marker_colormap = args.markercolormap
+
+        style.set_prop_cycle(colormap=colormaps[n], marker_colormap=marker_colormap)
 
         for j in range(ycol.shape[1]):
-            plt.plot(xcol, ycol.iloc[:,j], label=fileprefix[n] + ytitle[j], **styles[n])
+            plotfunc = {None:plt.plot, 'x':plt.semilogx, 'y':plt.semilogy, 'all':plt.loglog}[args.log]
+            plotfunc(xcol, ycol.iloc[:,j], label=fileprefix[n] + ytitle[j], **styles[n])
 
         xtitles.add(xtitle)
         if len(ytitle) == 1:
@@ -184,21 +220,10 @@ def main():
     if args.title:
         plt.title(args.title)
 
+    if legend:
+        style.legend(**legend_style)
 
-    style.legend()
-
-    style.set_subplot_aspect()
-    style.set_figuresize_by_subplots()
-
-    plt.tight_layout()
-
-
-    if args.save:
-        plt.savefig(args.save)
-    else:
-        plt.show()
-
-
+    style.render_resized(filename=args.save, dpi=args.dpi, aspect=args.aspect) 
     
 
 if __name__ == '__main__':
