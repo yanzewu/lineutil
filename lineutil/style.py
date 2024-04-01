@@ -121,6 +121,12 @@ def setd_minor_ticks(axis='both', direction='in', width=0.5, length=2, nticks=1)
         except KeyError:
             plt.rc(g + '.minor', width=width, size=length, visible=True)
 
+def setd_constraint_layout():
+    """ Set the constraint layout. Will be beneficial for most of the regular uses.
+    """
+    plt.rc('figure.constrained_layout', use=True)
+
+
 # size-related
 
 def set_subplot_aspect(aspect:float=0.8, figure:Optional[Figure]=None):
@@ -193,6 +199,7 @@ def render_resized(filename:Optional[str]=None, show:Optional[bool]=None, dpi:Op
     show: Controls whether to show the figure. Only applies when `filename != None`.
     dpi: The figure dpi.
     aspect: The subplot aspect. Defaults to 0.6 for a single subplot, and 0.8 for other cases.
+    tight_layout: Whether to call `tight_layout()` for rendering, in the case when constrained layout is not used.
 
     Also when there is only a single subplot, the subfig_width defaults to 6 instead of 5.
     
@@ -213,7 +220,8 @@ def render_resized(filename:Optional[str]=None, show:Optional[bool]=None, dpi:Op
 
     set_subplot_aspect(aspect, figure)
     set_figuresize_by_subplots(**kwargs1, figure=figure)
-    if tight_layout:
+
+    if tight_layout and not figure.get_constrained_layout():
         plt.tight_layout()
 
     if filename is not None:
@@ -384,7 +392,7 @@ def legend(*args, axes=None, box:bool=False, column=None, row=None, linewidth:fl
     if column:
         kwargs1.setdefault('ncol', column)
     elif row:
-        kwargs1.setdefault('ncol', round(len(axis.lines)/row + 0.5))
+        kwargs1.setdefault('ncol', round(len(axes.lines)/row + 0.5))
     kwargs1.setdefault('fancybox', False)
 
         # handles outside

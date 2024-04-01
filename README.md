@@ -30,11 +30,22 @@ Nature style (sans-serif fonts):
 
 Shell:
 
-    python -m lineutil -x [column_x] -y [column_y] [your_table_file_separated_by_space]
+    python -m lineutil -x [column_x] -y [column_y] [filename]
+
+By defaults, the separator of file is any white characters (use `--sep` to change.) column_x and column_y may be integers (starting from 1) or string. column_y may also be slices ("1:5"). By default, column_x = 1, column_y = "2:".
+
+Shell (line + scatter):
+
+    python -m lineutil -x [column_x] -y [column_y] -s 'pt=o' [filename]
 
 Shell (plotting two contrast sets of data):
 
-    python -m lineutil -x [column_x] -y [column_y] -cm -cm "line.lighter" -s -s "linestyle=--" [your_table_file_separated_by_space]
+    python -m lineutil -x [column_x] -y [column_y] -cm -cm "line.lighter" -s -s "linestyle=--" [file1] [file2]
+
+Shell (plotting two data sequentially)
+
+    python -m lineutil -x [x_file1] -y [y_file1] -x [x_file2] -y [y_file2] --append [file1] [file2]
+
 
 Script:
 
@@ -61,3 +72,10 @@ Script (plotting two contrast sets of data):
     ...
 
     lineutil.render_resized()
+
+
+### Colormap References
+
+The leftmost one is reference color, and will not be enabled by default (unless use `lineutil.set_prop_cycle(skip_header=False)`).
+
+![colormap](colormaps.png)

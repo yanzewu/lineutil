@@ -94,14 +94,14 @@ def parse_bool(s):
 def main():
 
     parser = argparse.ArgumentParser('plot one or multiple files')
-    parser.add_argument('-x', default='1', help='The identifier of x column. Either a number (starting from 1) or a column title')
-    parser.add_argument('-y', default='2:', help='The identifier of y columns. One of a number, a column title or a range (like "1:5")')
+    parser.add_argument('-x', action='append', help='The identifier of x column. Either a number (starting from 1) or a column title')
+    parser.add_argument('-y', action='append', help='The identifier of y columns. One of a number, a column title or a range (like "1:5")')
     parser.add_argument('-s', '--style', action='append', nargs='?', help='Keyword arguments passed to individual plt.plot() call respectively, with format "key=args,key2=arg2,..."')
     parser.add_argument('-cm', '--colormap', action='append', nargs='?', help='Name of the colormap')
     parser.add_argument('-mcm', '--markercolormap', default='lighter', help='Name of the colormap for the marker facecolor; OR one of "same"/"lighter" ')
-    parser.add_argument('--default', help='Keyword arguments passed to all plt.plot() calls. In the format "key=args,key2=arg2,..."')
-    parser.add_argument('--header', type=parse_bool, default=True, help='Whether file has a header of column names')
+    parser.add_argument('-d', '--default', help='Keyword arguments passed to all plt.plot() calls. In the format "key=args,key2=arg2,..."')
     parser.add_argument('--sep', default='\s+', help='Separator of the input file')
+    parser.add_argument('--append', action='store_true', default=False, help='Treat line properties of different files all at the same cycle')
     # parser.add_argument('--overlay', choices=['direct', 'subplot'], default='direct') # direct/subplot/figure
     parser.add_argument('--save', help='Filename (if save)')
     parser.add_argument('--xlabel', help='Label of x axis')
@@ -120,13 +120,35 @@ def main():
     translation = {'c':'color', 'lc':'color', 'lt':'linestyle', 'pt':'marker', 'ps':'markersize', 
                    'fill':'fillstyle', 'edgecolor':'markeredgecolor', 'facecolor':'markerfacecolor'}
 
+    # ===== Parse axis ========
+
+    if args.x is None:
+        args.x = ['1']
+    if args.y is None:
+        args.y = ['2:']
+    
+    assert len(args.x) == len(args.y)
+
+    if len(args.x) == len(args.files):
+        files = args.files
+    elif len(args.x) == 1:
+        args.x = args.x * len(args.files)
+        args.y = args.y * len(args.files)
+        files = args.files
+    elif len(args.files) == 1:
+        files = args.files * len(args.x)
+    else:
+        raise ValueError('Number of X/Y pairs must be consistent with files')
+    
+
+    # ===== Parsing styles ======
+
     default_style = parse_dict(args.default, translation)
-    header = None if not args.header else 0
     if args.style is None:
         args.style = []
     
     styles = []
-    for j in range(len(args.files)):
+    for j in range(len(files) if not args.append else 1):
         if j < len(args.style):
             d = default_style.copy()
             d.update(parse_dict(args.style[j], translation))
@@ -134,45 +156,21 @@ def main():
         else:
             styles.append(default_style)
 
-    try:
-        legend = parse_bool(args.legend)
-        legend_style = {}
-    except KeyError:
-        legend = True
-        legend_style = parse_dict(args.legend, translation)
-
-    style.setd_sans_serif()
-    style.setd_legend()
-    style.setd_line()
-    style.setd_ticks()
-    style.setd_subplot(linewidth=0.8)
-    style.setd_minor_ticks()
-
-    plt.figure('line')
-
-    if len(args.files) == 1:
-        fileprefix = ['']
-    else:
-        if len(set((os.path.basename(x) for x in args.files))) == len(args.files):
-            fileprefix = [os.path.basename(x) + ':' for x in args.files]
-        else:
-            fileprefix = [x + ':' for x in args.files]
+    # Colormaps
 
     if args.colormap is None:
-        colormaps = ['line.default'] * len(args.files)
+        colormaps = ['line.default'] * len(styles)
     else:
         colormaps = [x if x else 'line.default' for x in args.colormap]
-        colormaps += [colormaps[-1]] * (len(args.files) - len(colormaps))
+        colormaps += [colormaps[-1]] * (len(styles) - len(colormaps))
 
-    xtitles = set()
-    ytitles = set()
-    for n, file in enumerate(args.files):
-        data = pd.read_csv(file, sep=args.sep, header=header, index_col=False)
-        xcol, ycol, xtitle, ytitle = parse_cols(args.x, args.y, data)
+    # Marker colormaps
 
+    # marker color: If styles is empty, need to inject to colormap
+    # else -- inject to styles
 
-        # marker color: If styles is empty, need to inject to colormap
-        # else -- inject to styles
+    marker_colormaps = []
+    for n in range(len(styles)):
         if args.markercolormap == 'same':
             if 'color' in styles[n]:
                 styles[n].setdefault('markerfacecolor', styles[n]['color'])
@@ -187,15 +185,63 @@ def main():
                 if colormaps[n] == 'line.default':
                     marker_colormap = 'line.lighter'
                 else:
-                    marker_colormap = [style.lighten_color(*c[:3]) for c in style.get_colors(colormaps[n])]
+                    colors = style.get_colors(colormaps[n])
+                    marker_colormap = [style.lighten_color(*c[:3]) for c in (colors[1:] if colormaps[n].startswith('line.') else colors)]
         else:
             marker_colormap = args.markercolormap
+        
+        marker_colormaps.append(marker_colormap)
 
-        style.set_prop_cycle(colormap=colormaps[n], marker_colormap=marker_colormap)
+    # Parsing legend
+
+    try:
+        legend = parse_bool(args.legend)
+        legend_style = {}
+    except KeyError:
+        legend = True
+        legend_style = parse_dict(args.legend, translation)
+
+
+    # File prefix
+
+    if len(args.files) == 1:    # note it's args.files. files may be duplicated.
+        fileprefix = [''] * len(files)
+    else:
+        # we have different basename -- we only need to use that
+        if len(set((os.path.basename(x) for x in args.files))) == len(args.files):
+            fileprefix = [os.path.basename(x) + ':' for x in files]
+
+        # otherwise we goto the full name
+        else:
+            fileprefix = [x + ':' for x in files]
+
+    # Setup
+
+    style.setd_sans_serif()
+    style.setd_legend()
+    style.setd_line(linewidth=2)
+    style.setd_ticks()
+    style.setd_subplot(linewidth=0.8)
+    style.setd_minor_ticks()
+    style.setd_constraint_layout()
+
+    plt.figure('line')
+
+
+    # Plotting
+
+    xtitles = set()
+    ytitles = set()
+    for n, file in enumerate(files):
+        data = pd.read_csv(file, sep=args.sep, index_col=False)
+        xcol, ycol, xtitle, ytitle = parse_cols(args.x[n], args.y[n], data)
+
+        if n == 0 or not args.append:
+            style.set_prop_cycle(colormap=colormaps[n], marker_colormap=marker_colormaps[n])
 
         for j in range(ycol.shape[1]):
             plotfunc = {None:plt.plot, 'x':plt.semilogx, 'y':plt.semilogy, 'all':plt.loglog}[args.log]
-            plotfunc(xcol, ycol.iloc[:,j], label=fileprefix[n] + ytitle[j], **styles[n])
+            plotfunc(xcol, ycol.iloc[:,j], label=fileprefix[n] + ytitle[j], **styles[n if not args.append else 0])
 
         xtitles.add(xtitle)
         if len(ytitle) == 1:
